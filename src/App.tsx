@@ -407,6 +407,74 @@ export default function App() {
     if (!isOnboarded) {
       setOnboardingOpen(true);
     }
+
+    // Auto-request Geolocation permission on initial page load
+    const geo = navigator.geolocation;
+    if (geo) {
+      geo.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy;
+          const speed = pos.coords.speed;
+
+          const freshPoint: LocationPoint = {
+            lat,
+            lon,
+            accuracy: accuracy || 10,
+            speed: speed || 0,
+            timestamp: pos.timestamp
+          };
+
+          setCurrentLocation(freshPoint);
+          map.setView([lat, lon], 14);
+
+          // Standard active tracking (equivalent of toggleRealGPSWatcher but auto-enabled on load)
+          setGpsError(null);
+          setIsSimulating(false);
+
+          const targetId = geo.watchPosition(
+            (watchPos) => {
+              const wlLat = watchPos.coords.latitude;
+              const wlLon = watchPos.coords.longitude;
+              const wlAccuracy = watchPos.coords.accuracy;
+              const wlSpeed = watchPos.coords.speed;
+
+              setCurrentLocation({
+                lat: wlLat,
+                lon: wlLon,
+                accuracy: wlAccuracy || 10,
+                speed: wlSpeed || 0,
+                timestamp: watchPos.timestamp
+              });
+              setRealGPSActive(true);
+
+              if (mapRef.current) {
+                mapRef.current.setView([wlLat, wlLon]);
+              }
+            },
+            (error) => {
+              console.warn("Continuing GPS watch failure", error);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
+            }
+          );
+          setGpsWatcherId(targetId);
+          setRealGPSActive(true);
+        },
+        (error) => {
+          console.log("Initial geolocation prompt dismissed or unavailable, using fallback center.", error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 8500,
+          maximumAge: 0
+        }
+      );
+    }
   }, []);
 
   // Sync Leaflet map objects (Markers + Circular Geofence + Route Polyline + Waypoints) every state change
@@ -877,6 +945,13 @@ export default function App() {
     const remaining = getRouteDistanceRemaining();
     setDistanceRemaining(remaining);
   }, [currentLocation.lat, currentLocation.lon, destination, routeWaypoints, isSimulating]);
+
+  // Airtight unified reactive geofence trigger check
+  useEffect(() => {
+    if (tripStatus === 'active' && distanceRemaining !== null && distanceRemaining <= radiusMeters) {
+      triggerAlarmAlert();
+    }
+  }, [distanceRemaining, radiusMeters, tripStatus]);
 
   // Recenter Map beautifully over the current commute user dot
   const handleRecenterLocation = () => {
