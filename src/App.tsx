@@ -65,7 +65,7 @@ export default function App() {
   const [distanceRemaining, setDistanceRemaining] = useState<number | null>(null);
   
   // Real GPS & Browser State
-  const [realGPSActive, setRealGPSActive] = useState(false);
+  const [realGPSActive, setRealGPSActive] = useState(true);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsWatcherId, setGpsWatcherId] = useState<number | null>(null);
 
