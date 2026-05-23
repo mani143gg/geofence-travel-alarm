@@ -1,6 +1,0 @@
-{
-  "name": "GeoFence Travel Alarm",
-  "description": "A minimalistic geofencing travel alarm app for bus, train, and transit commuters with customizable alert radius, speed-adaptive GPS simulation, and offline history.",
-  "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
