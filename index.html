@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoFence Travel Alarm</title>
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Leaflet Map JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+      /* Custom styles to hide default Leaflet attribution for a cleaner Uber-style aesthetic */
+      .leaflet-control-attribution {
+        font-size: 9px !important;
+        background: rgba(255, 255, 255, 0.75) !important;
+        border-radius: 4px;
+        padding: 1px 4px !important;
+      }
+      /* Custom map zoom buttons style for minimalist floating circular icons */
+      .leaflet-bar {
+        border: none !important;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1) !important;
+      }
+      .leaflet-bar a {
+        background-color: white !important;
+        color: #1f2937 !important;
+        border-bottom: 1px solid #f3f4f6 !important;
+        transition: background-color 0.15s ease;
+      }
+      .dark .leaflet-bar a {
+        background-color: #1f2937 !important;
+        color: #f3f4f6 !important;
+        border-bottom: 1px solid #374151 !important;
+      }
+      .leaflet-bar a:hover {
+        background-color: #f3f4f6 !important;
+      }
+      .dark .leaflet-bar a:hover {
+        background-color: #374151 !important;
+      }
+    </style>
+    <script type="module" crossorigin src="/geofence-travel-alarm/assets/index-i-Dz8iaG.js"></script>
+    <link rel="stylesheet" crossorigin href="/geofence-travel-alarm/assets/index-ByFryFlw.css">
+  </head>
+  <body class="bg-slate-50 text-slate-800 transition-colors duration-300">
+    <div id="root"></div>
+  </body>
+</html>
+
