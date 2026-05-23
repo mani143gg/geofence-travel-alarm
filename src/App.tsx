@@ -244,6 +244,13 @@ export default function App() {
     return `${Math.round(distanceRemaining)} meters`;
   };
 
+  const formatDistanceMeter = (meters: number): string => {
+    if (meters >= 1000) {
+      return `${(meters / 1000).toFixed(2)} KM`;
+    }
+    return `${Math.round(meters)} meters`;
+  };
+
   // Helper to determine the full sequential path coordinates representing the current route
   const getRoutePathCoordinates = () => {
     const startPoint = simStartLocation || { lat: currentLocation.lat, lon: currentLocation.lon };
@@ -440,10 +447,12 @@ export default function App() {
       attribution
     }).addTo(map);
 
-    // Re-bind zoom controls into bottom-right for elegant alignment
-    L.control.zoom({
-      position: 'bottomright'
-    }).addTo(map);
+    // Re-bind zoom controls for desktop view
+    if (window.innerWidth >= 768) {
+      L.control.zoom({
+        position: 'bottomleft'
+      }).addTo(map);
+    }
 
     mapRef.current = map;
 
@@ -1728,50 +1737,78 @@ export default function App() {
       {/* RELOCATION CONFIRMATION DIALOG */}
       {relocateConfirmData && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
-          {/* Backdrop overlay */}
-          <div 
-            className="absolute inset-0 bg-slate-900/65 backdrop-blur-sm transition-opacity"
-            onClick={() => setRelocateConfirmData(null)}
-          />
+          {/* Backdrop overlay - clicks dismissed removed to prevent instant double-click termination */}
+          <div className="absolute inset-0 bg-slate-900/75 backdrop-blur-md transition-opacity" />
 
           {/* Modal Container */}
-          <div className="relative w-full max-w-sm transform overflow-hidden rounded-3xl bg-white p-6 shadow-2xl transition-all dark:bg-slate-900 border border-slate-150 dark:border-slate-850 animate-in fade-in zoom-in-95 duration-200">
-            <div className="text-center space-y-4">
+          <div className="relative w-full max-w-md transform overflow-hidden rounded-3xl bg-white p-6 shadow-2xl transition-all dark:bg-slate-900 border border-slate-150 dark:border-slate-850 animate-in fade-in zoom-in-95 duration-200">
+            <div className="space-y-4">
               
-              {/* Alert Icon Display */}
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500 dark:bg-rose-950/45 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40">
-                <ShieldAlert className="h-7 w-7 animate-pulse" />
-              </div>
-
-              {/* Header Titles */}
-              <div className="space-y-1">
-                <h3 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-                  {tripStatus === 'active' ? "Active Commute Running" : "Replace Current Stop?"}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed px-2">
-                  {tripStatus === 'active' 
-                    ? "You have an active tracking session. To proceed with setting this new destination, you must cancel the current session first."
-                    : "A commute stop has already been configured on the map. Would you like to discard it and set this new location instead?"
-                  }
-                </p>
-              </div>
-
-              {/* Informative Grid Details */}
-              <div className="rounded-2xl bg-slate-50 dark:bg-slate-950 p-4 border border-slate-100 dark:border-slate-850/50 text-left text-xs space-y-3">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] font-mono font-bold tracking-widest text-[#FF1744] block">NEW CO-ORDINATES</span>
-                  <p className="font-bold text-slate-850 dark:text-white line-clamp-1">{relocateConfirmData.name}</p>
+              {/* Header Title with Alarm/Replace Warning Icon */}
+              <div className="flex items-center gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/45 text-amber-500 border border-amber-100 dark:border-amber-900/40">
+                  <ShieldAlert className="h-6 w-6 animate-pulse" />
                 </div>
-
-                <div className="h-px bg-slate-200/60 dark:bg-slate-850" />
-
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-450">
-                  <span>New Lat/Lon:</span>
-                  <span className="font-mono text-slate-850 dark:text-slate-200">
-                    {relocateConfirmData.lat.toFixed(4)}°, {relocateConfirmData.lon.toFixed(4)}°
-                  </span>
+                <div className="text-left">
+                  <h3 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
+                    {tripStatus === 'active' ? "Stop Active Commute?" : "Replace Current Stop?"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {tripStatus === 'active' 
+                      ? "An active tracking session is currently running."
+                      : "Would you like to discard the existing destination?"
+                    }
+                  </p>
                 </div>
               </div>
+
+              {/* Informative Grid Details comparison block */}
+              <div className="space-y-3 pt-1 text-left">
+                {destination && (
+                  <div className="rounded-2xl bg-slate-50/70 dark:bg-slate-950/40 p-3.5 border border-slate-200/50 dark:border-slate-800/50 text-xs">
+                    <span className="text-[9px] font-mono font-bold tracking-wider text-slate-400 dark:text-slate-500 block uppercase">CURRENT CONFIGURED STOP</span>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{destination.name}</p>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-1.5 flex justify-between">
+                      <span>{destination.lat.toFixed(4)}°, {destination.lon.toFixed(4)}°</span>
+                      <span>Radius: <strong className="text-slate-700 dark:text-slate-300 font-bold">{formatDistanceMeter(destination.radius || radiusMeters)}</strong></span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[10px] bg-slate-100 dark:bg-slate-900/50 rounded-lg px-2.5 py-1 text-slate-500 font-semibold font-mono">
+                      <span>Distance from you:</span>
+                      <span className="text-indigo-650 dark:text-indigo-400 font-bold">
+                        {formatDistanceMeter(getDistanceMeters(currentLocation.lat, currentLocation.lon, destination.lat, destination.lon))}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-center py-1">
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                  <div className="mx-3 text-[9px] font-mono tracking-widest text-[#FF1744] font-bold uppercase">REPLACING WITH NEW SELECTION</div>
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                </div>
+
+                <div className="rounded-2xl bg-emerald-500/5 dark:bg-emerald-400/5 p-3.5 border border-emerald-500/20 dark:border-emerald-400/20 text-xs shadow-sm">
+                  <span className="text-[9px] font-mono font-bold tracking-wider text-emerald-500 dark:text-emerald-400 block uppercase">PROPOSED COMMUTE STOP</span>
+                  <p className="font-bold text-slate-950 dark:text-white truncate mt-0.5">{relocateConfirmData.name}</p>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-455 font-mono mt-1.5 flex justify-between">
+                    <span>{relocateConfirmData.lat.toFixed(4)}°, {relocateConfirmData.lon.toFixed(4)}°</span>
+                    <span>Radius: <strong className="text-emerald-650 dark:text-emerald-400 font-bold">{formatDistanceMeter(relocateConfirmData.radius || radiusMeters)}</strong></span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] bg-emerald-500/10 dark:bg-emerald-500/10 rounded-lg px-2.5 py-1 text-emerald-700 dark:text-emerald-400 font-semibold font-mono">
+                    <span>Distance from you:</span>
+                    <span className="text-emerald-600 dark:text-emerald-300 font-black">
+                      {formatDistanceMeter(getDistanceMeters(currentLocation.lat, currentLocation.lon, relocateConfirmData.lat, relocateConfirmData.lon))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warnings */}
+              {tripStatus === 'active' && (
+                <div className="p-3 bg-amber-500/10 rounded-2xl text-[11px] text-amber-600 dark:text-amber-400 leading-normal border border-amber-500/10 font-sans">
+                  ⚠️ <strong>Notice:</strong> This replaces your currently active tracking session. Your current walk/transit statistics logs will save and a brand-new track will start.
+                </div>
+              )}
 
               {/* Confirmation Action buttons */}
               <div className="flex gap-3 pt-2">
@@ -1787,7 +1824,7 @@ export default function App() {
                   onClick={confirmRelocation}
                   className="flex-1 px-4 py-3 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white text-xs font-bold rounded-2xl shadow-md shadow-rose-500/10 hover:shadow-rose-500/20 transition-all cursor-pointer active:scale-98"
                 >
-                  {tripStatus === 'active' ? "Stop & Relocate" : "Replace Stop"}
+                  {tripStatus === 'active' ? "Stop & Relocate" : "Use New Stop"}
                 </button>
               </div>
 
