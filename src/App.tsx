@@ -275,6 +275,72 @@ export default function App() {
   };
 
   // Standard Geolocation Activators
+  const startRealGPSTracking = (useHighAccuracy: boolean = true) => {
+    const geo = navigator.geolocation;
+    if (!geo) {
+      setGpsError("Geolocation is completely disabled or unsupported in this browser.");
+      return;
+    }
+
+    setGpsError(null);
+    setIsSimulating(false);
+
+    const targetId = geo.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
+        const speed = pos.coords.speed; // meters per second
+
+        const freshPoint: LocationPoint = {
+          lat,
+          lon,
+          accuracy: accuracy || 10,
+          speed: speed || 0,
+          timestamp: pos.timestamp
+        };
+
+        setCurrentLocation(freshPoint);
+        setRealGPSActive(true);
+
+        // Center map dynamically to follow real position
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lon]);
+        }
+
+        // Evaluate geofence
+        if (destination && tripStatus === 'active') {
+          const dist = getDistanceMeters(lat, lon, destination.lat, destination.lon);
+          setDistanceRemaining(dist);
+        }
+      },
+      (error) => {
+        console.error("GPS Watcher error:", error);
+        
+        // If high accuracy failed/timed out, try fallback immediately with high accuracy false
+        if (useHighAccuracy && (error.code === error.TIMEOUT || error.code === error.POSITION_UNAVAILABLE)) {
+          console.warn("High-accuracy failed or timed out. Retrying with enableHighAccuracy: false...");
+          startRealGPSTracking(false);
+          return;
+        }
+
+        let label = "Location permission rejected. Allow GPS access to activate standard commutes tracking.";
+        if (error.code === error.POSITION_UNAVAILABLE) label = "GPS Satellite Signal is unavailable. Try moving closer to windows.";
+        else if (error.code === error.TIMEOUT) label = "GPS Polling timed out. Try toggling your location settings.";
+        setGpsError(label);
+        setRealGPSActive(false);
+      },
+      {
+        enableHighAccuracy: useHighAccuracy,
+        timeout: useHighAccuracy ? 7000 : 15000,
+        maximumAge: 0
+      }
+    );
+
+    setGpsWatcherId(targetId);
+    setRealGPSActive(true);
+  };
+
   const toggleRealGPSWatcher = () => {
     const geo = navigator.geolocation;
     if (!geo) {
@@ -289,58 +355,7 @@ export default function App() {
       }
       setRealGPSActive(false);
     } else {
-      setGpsError(null);
-      setIsSimulating(false); // disable simulator if user requested real GPS tracking
-
-      const targetId = geo.watchPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const accuracy = pos.coords.accuracy;
-          const speed = pos.coords.speed; // meters per second
-
-          const freshPoint: LocationPoint = {
-            lat,
-            lon,
-            accuracy,
-            speed,
-            timestamp: pos.timestamp
-          };
-
-          setCurrentLocation(freshPoint);
-          setRealGPSActive(true);
-
-          // Center map dynamically to follow real position
-          if (mapRef.current) {
-            mapRef.current.setView([lat, lon]);
-          }
-
-          // Evaluate geofence
-          if (destination && tripStatus === 'active') {
-            const dist = getDistanceMeters(lat, lon, destination.lat, destination.lon);
-            setDistanceRemaining(dist);
-
-            if (dist <= radiusMeters) {
-              triggerAlarmAlert();
-            }
-          }
-        },
-        (error) => {
-          console.error("GPS Watcher failure", error);
-          let label = "Location permission rejected. Allow GPS access to activate standard commutes tracking.";
-          if (error.code === error.POSITION_UNAVAILABLE) label = "GPS Satellite Signal is unavailable. Try moving closer to windows.";
-          else if (error.code === error.TIMEOUT) label = "GPS Polling timed out. Try toggling your location settings.";
-          setGpsError(label);
-          setRealGPSActive(false);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      );
-      setGpsWatcherId(targetId);
-      setRealGPSActive(true);
+      startRealGPSTracking(true);
       playChime();
     }
   };
@@ -407,6 +422,61 @@ export default function App() {
     if (!isOnboarded) {
       setOnboardingOpen(true);
     }
+
+    // Auto-request Geolocation permission on initial page load
+    const startInitialGPS = (useHighAccuracy: boolean = true) => {
+      const geo = navigator.geolocation;
+      if (!geo) return;
+
+      setIsSimulating(false);
+      setGpsError(null);
+
+      const targetId = geo.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy;
+          const speed = pos.coords.speed;
+
+          const freshPoint: LocationPoint = {
+            lat,
+            lon,
+            accuracy: accuracy || 10,
+            speed: speed || 0,
+            timestamp: pos.timestamp
+          };
+
+          setCurrentLocation(freshPoint);
+          setRealGPSActive(true);
+
+          if (mapRef.current) {
+            mapRef.current.setView([lat, lon]);
+          }
+        },
+        (error) => {
+          console.error("Initial GPS Watcher error:", error);
+          if (useHighAccuracy && (error.code === error.TIMEOUT || error.code === error.POSITION_UNAVAILABLE)) {
+            console.warn("Initial high-accuracy timed out/failed. Retrying coarse location...");
+            startInitialGPS(false);
+            return;
+          }
+          let label = "Location permission rejected. Allow GPS access to activate standard commutes tracking.";
+          if (error.code === error.POSITION_UNAVAILABLE) label = "GPS Satellite Signal is unavailable. Try moving closer to windows.";
+          else if (error.code === error.TIMEOUT) label = "GPS Polling timed out. Try toggling your location settings.";
+          setGpsError(label);
+          setRealGPSActive(false);
+        },
+        {
+          enableHighAccuracy: useHighAccuracy,
+          timeout: useHighAccuracy ? 7000 : 15000,
+          maximumAge: 0
+        }
+      );
+      setGpsWatcherId(targetId);
+      setRealGPSActive(true);
+    };
+
+    startInitialGPS(true);
   }, []);
 
   // Sync Leaflet map objects (Markers + Circular Geofence + Route Polyline + Waypoints) every state change
@@ -877,6 +947,13 @@ export default function App() {
     const remaining = getRouteDistanceRemaining();
     setDistanceRemaining(remaining);
   }, [currentLocation.lat, currentLocation.lon, destination, routeWaypoints, isSimulating]);
+
+  // Airtight unified reactive geofence trigger check
+  useEffect(() => {
+    if (tripStatus === 'active' && distanceRemaining !== null && distanceRemaining <= radiusMeters) {
+      triggerAlarmAlert();
+    }
+  }, [distanceRemaining, radiusMeters, tripStatus]);
 
   // Recenter Map beautifully over the current commute user dot
   const handleRecenterLocation = () => {
