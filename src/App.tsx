@@ -40,6 +40,8 @@ import SimulationControls from './components/SimulationControls';
 import { Destination, LocationPoint, TripHistoryItem, TripStatus } from './types';
 import { startAlarmSound, stopAlarmSound, playChime, ALARM_SOUND_OPTIONS } from './utils/audio';
 
+import gpsRadarLoader from './assets/images/gps_radar_loader_1779566129839.png';
+
 // Fallback London coordinates for initial location centering
 const DEFAULT_LAT = 8.5241;
 const DEFAULT_LON = 76.9366;
@@ -49,6 +51,17 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('geofence_dark_mode') === 'true';
   });
+
+  // Location Loading State across initially granting permissions
+  const [isLocationLoading, setIsLocationLoading] = useState<boolean>(true);
+
+  // Safety fallback to auto-dismiss loader after 4.5 seconds if geolocation hangs or is blocked in iframe
+  useEffect(() => {
+    const loaderFallbackTimer = setTimeout(() => {
+      setIsLocationLoading(false);
+    }, 4500);
+    return () => clearTimeout(loaderFallbackTimer);
+  }, []);
 
   // Trip Core State
   const [currentLocation, setCurrentLocation] = useState<LocationPoint>({
@@ -89,6 +102,31 @@ export default function App() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPage, setMenuPage] = useState<'main' | 'sound' | 'about'>('main');
+
+  // Confirmation state when relocating while active tracking
+  const [relocateConfirmData, setRelocateConfirmData] = useState<{
+    lat: number;
+    lon: number;
+    name: string;
+    radius?: number;
+  } | null>(null);
+
+  // Refs to prevent stale closures in leaflet map events
+  const tripStatusRef = useRef<TripStatus>('idle');
+  const destinationRef = useRef<Destination | null>(null);
+  const radiusMetersRef = useRef<number>(5000);
+
+  useEffect(() => {
+    tripStatusRef.current = tripStatus;
+  }, [tripStatus]);
+
+  useEffect(() => {
+    destinationRef.current = destination;
+  }, [destination]);
+
+  useEffect(() => {
+    radiusMetersRef.current = radiusMeters;
+  }, [radiusMeters]);
 
   // Reset settings sidebar page when menu closes or audio previews stop
   useEffect(() => {
@@ -206,6 +244,13 @@ export default function App() {
     return `${Math.round(distanceRemaining)} meters`;
   };
 
+  const formatDistanceMeter = (meters: number): string => {
+    if (meters >= 1000) {
+      return `${(meters / 1000).toFixed(2)} KM`;
+    }
+    return `${Math.round(meters)} meters`;
+  };
+
   // Helper to determine the full sequential path coordinates representing the current route
   const getRoutePathCoordinates = () => {
     const startPoint = simStartLocation || { lat: currentLocation.lat, lon: currentLocation.lon };
@@ -279,11 +324,13 @@ export default function App() {
     const geo = navigator.geolocation;
     if (!geo) {
       setGpsError("Geolocation is completely disabled or unsupported in this browser.");
+      setIsLocationLoading(false);
       return;
     }
 
     setGpsError(null);
     setIsSimulating(false);
+    setIsLocationLoading(true);
 
     const targetId = geo.watchPosition(
       (pos) => {
@@ -302,6 +349,7 @@ export default function App() {
 
         setCurrentLocation(freshPoint);
         setRealGPSActive(true);
+        setIsLocationLoading(false);
 
         // Center map dynamically to follow real position
         if (mapRef.current) {
@@ -329,6 +377,7 @@ export default function App() {
         else if (error.code === error.TIMEOUT) label = "GPS Polling timed out. Try toggling your location settings.";
         setGpsError(label);
         setRealGPSActive(false);
+        setIsLocationLoading(false);
       },
       {
         enableHighAccuracy: useHighAccuracy,
@@ -389,7 +438,8 @@ export default function App() {
     const attribution = '© OpenStreetMap contributors © CARTO';
 
     const map = L.map(mapContainerId, {
-      zoomControl: false // custom floating controls are positioned manually
+      zoomControl: false, // custom floating controls are positioned manually
+      doubleClickZoom: false // disable default double-click zoom to let us use dblclick
     }).setView([DEFAULT_LAT, DEFAULT_LON], 11);
 
     tileLayerRef.current = L.tileLayer(tileUrl, {
@@ -397,22 +447,32 @@ export default function App() {
       attribution
     }).addTo(map);
 
-    // Re-bind zoom controls into bottom-right for elegant alignment
-    L.control.zoom({
-      position: 'bottomright'
-    }).addTo(map);
+    // Re-bind zoom controls for desktop view
+    if (window.innerWidth >= 768) {
+      L.control.zoom({
+        position: 'bottomleft'
+      }).addTo(map);
+    }
 
     mapRef.current = map;
 
-    // Double-click grid maps or single-tap to manually position Stop boundaries
-    map.on('click', (e: any) => {
+    // Double-click grid maps to manually position Stop boundaries
+    map.on('dblclick', (e: any) => {
       const { lat, lng } = e.latlng;
-      
-      // Do not allow destination changes while alarm tracker is running
-      if (tripStatus === 'active') return;
+
+      // 1. Show confirmation dialog if trip is active or destination is already set
+      if (tripStatusRef.current === 'active' || destinationRef.current !== null) {
+        setRelocateConfirmData({
+          lat,
+          lon: lng,
+          name: `Marker Pin: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+          radius: radiusMetersRef.current
+        });
+        return;
+      }
 
       const visualName = `Marker Pin: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
-      updateStopDestination(lat, lng, visualName, radiusMeters);
+      updateStopDestination(lat, lng, visualName, radiusMetersRef.current);
       
       // Request a reverse geocode from Nominatim proxy
       fetchReverseGeocode(lat, lng);
@@ -426,7 +486,10 @@ export default function App() {
     // Auto-request Geolocation permission on initial page load
     const startInitialGPS = (useHighAccuracy: boolean = true) => {
       const geo = navigator.geolocation;
-      if (!geo) return;
+      if (!geo) {
+        setIsLocationLoading(false);
+        return;
+      }
 
       setIsSimulating(false);
       setGpsError(null);
@@ -448,6 +511,7 @@ export default function App() {
 
           setCurrentLocation(freshPoint);
           setRealGPSActive(true);
+          setIsLocationLoading(false);
 
           if (mapRef.current) {
             mapRef.current.setView([lat, lon]);
@@ -465,6 +529,7 @@ export default function App() {
           else if (error.code === error.TIMEOUT) label = "GPS Polling timed out. Try toggling your location settings.";
           setGpsError(label);
           setRealGPSActive(false);
+          setIsLocationLoading(false);
         },
         {
           enableHighAccuracy: useHighAccuracy,
@@ -524,11 +589,16 @@ export default function App() {
 
       if (destMarkerRef.current) {
         destMarkerRef.current.setLatLng([destination.lat, destination.lon]);
+        if (tripStatus === 'active') {
+          destMarkerRef.current.dragging?.disable();
+        } else {
+          destMarkerRef.current.dragging?.enable();
+        }
       } else {
         // Build destination pin, make it fully draggable as requested!
         const marker = L.marker([destination.lat, destination.lon], { 
           icon: destIcon,
-          draggable: true 
+          draggable: tripStatus !== 'active'
         }).addTo(mapRef.current);
 
         // Bind Drag event handler
@@ -630,7 +700,7 @@ export default function App() {
 
           const marker = L.marker([wp.lat, wp.lon], {
             icon: wpIcon,
-            draggable: true
+            draggable: tripStatus !== 'active'
           }).addTo(mapRef.current);
 
           marker.on('drag', (e: any) => {
@@ -675,6 +745,11 @@ export default function App() {
             const activeCoords = marker.getLatLng();
             if (activeCoords.lat !== wp.lat || activeCoords.lng !== wp.lon) {
               marker.setLatLng([wp.lat, wp.lon]);
+            }
+            if (tripStatus === 'active') {
+              marker.dragging?.disable();
+            } else {
+              marker.dragging?.enable();
             }
           }
         });
@@ -749,7 +824,11 @@ export default function App() {
 
   // Handle Search selection
   const handleSelectLocation = (lat: number, lon: number, name: string) => {
-    updateStopDestination(lat, lon, name, radiusMeters);
+    if (tripStatus === 'active') {
+      setRelocateConfirmData({ lat, lon, name, radius: radiusMeters });
+    } else {
+      updateStopDestination(lat, lon, name, radiusMeters);
+    }
   };
 
   // Handle Alarm Sound select with short audio preview
@@ -989,8 +1068,33 @@ export default function App() {
 
   // Quick reload coordinates from recent drawer lists
   const handleReuseDestination = (lat: number, lon: number, name: string, radius: number) => {
-    setRadiusMeters(radius);
-    updateStopDestination(lat, lon, name, radius);
+    if (tripStatus === 'active') {
+      setRelocateConfirmData({ lat, lon, name, radius });
+    } else {
+      setRadiusMeters(radius);
+      updateStopDestination(lat, lon, name, radius);
+    }
+  };
+
+  const confirmRelocation = () => {
+    if (!relocateConfirmData) return;
+    
+    // Stop the current active alarm/commute
+    handleCancelCommute();
+    
+    // Set the new destination
+    if (typeof relocateConfirmData.radius === 'number') {
+      setRadiusMeters(relocateConfirmData.radius);
+    }
+    updateStopDestination(
+      relocateConfirmData.lat, 
+      relocateConfirmData.lon, 
+      relocateConfirmData.name, 
+      relocateConfirmData.radius || radiusMeters
+    );
+    
+    // Clear overlay
+    setRelocateConfirmData(null);
   };
 
   // HTML5 Notification onboarding requests
@@ -1168,6 +1272,59 @@ export default function App() {
   return (
     <div className="relative font-sans h-screen w-screen flex flex-col md:flex-row bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 overflow-hidden">
       
+      {/* INITIAL LOCATION LOADER OVERLAY */}
+      {isLocationLoading && (
+        <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center p-6 bg-slate-950 text-center select-none">
+          <div className="max-w-md w-full flex flex-col items-center space-y-6">
+            
+            {/* Custom generated loader graphic illustration with glowing effect */}
+            <div className="relative w-44 h-44 rounded-3xl overflow-hidden border border-slate-850 shadow-2xl bg-slate-900 group">
+              <img 
+                src={gpsRadarLoader} 
+                alt="GPS Radar Loader" 
+                className="w-full h-full object-cover opacity-90 transition-all duration-1000"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-65" />
+              {/* Radar Sweeper Overlays */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="absolute animate-ping inline-flex h-20 w-20 rounded-full bg-emerald-500 opacity-25"></span>
+                <span className="absolute inline-flex h-32 w-32 rounded-full border border-indigo-500/25 animate-ping"></span>
+              </div>
+            </div>
+
+            <div className="space-y-2 mt-4">
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+                <h2 className="text-xl font-bold text-white tracking-tight">
+                  Locating Your Station
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                Finding your precise coordinates to center your commute map automatically.
+              </p>
+            </div>
+
+            {/* Micro details or Prompt Guide */}
+            <div className="bg-slate-900/60 border border-slate-850 px-4 py-3 rounded-2xl max-w-xs text-left w-full text-[11px] space-y-1">
+              <span className="text-[10px] font-mono font-bold tracking-wider text-indigo-400 block uppercase">BROWSER PROMPT</span>
+              <p className="text-slate-300 leading-normal">
+                Please click <strong className="text-white">"Allow"</strong> when prompted to access satellite GPS coordinates.
+              </p>
+            </div>
+
+            {/* Emergency skip button so user never feels locked */}
+            <button
+              onClick={() => setIsLocationLoading(false)}
+              className="text-xs font-mono font-bold text-slate-400 hover:text-white hover:underline transition-colors mt-2 cursor-pointer bg-slate-900 hover:bg-slate-850 border border-slate-800 px-4 py-2 rounded-xl"
+              title="Skip location search and start with default view"
+            >
+              Skip & Use Default Location
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Alarm Modal Overlay (Highly visual flashing screen alert block) */}
       {tripStatus === 'triggered' && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 urgent-pulse-bg text-center backdrop-blur-md">
@@ -1213,7 +1370,7 @@ export default function App() {
       
 
       {/* FULL MAP AREA */}
-      <div className="flex-grow h-[50vh] md:h-full relative z-10 bg-slate-150 order-1 md:order-2">
+      <div className="absolute inset-0 w-full h-full z-0 bg-slate-150">
         <div id={mapContainerId} className="h-full w-full" />
         
         {/* Floating Top Search Panel ON TOP of Map layout context */}
@@ -1243,7 +1400,7 @@ export default function App() {
         </div>
 
         {/* Recenter Map floating control stacked cleanly right above Leaflet's zoom controls */}
-        <div className="absolute bottom-[82px] right-[10px] z-[1010] pointer-events-auto">
+        <div className="absolute top-[72px] left-[16px] md:top-auto md:bottom-[78px] md:left-[10px] z-[1010] pointer-events-auto">
           {/* Recenter Map Target */}
           <button
             onClick={handleRecenterLocation}
@@ -1256,7 +1413,7 @@ export default function App() {
         
         {/* Floating status marker (Saves commutes stats view while tracking) */}
         {tripStatus === 'active' && distanceRemaining !== null && (
-          <div className="absolute bottom-6 left-6 z-20 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-slate-800 backdrop-blur-md animate-bounce">
+          <div className="absolute bottom-[40vh] left-4 md:bottom-6 md:left-6 z-20 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-slate-800 backdrop-blur-md animate-bounce">
             <div className="flex items-start gap-3">
               <div className="rounded-xl bg-emerald-500/20 text-emerald-400 p-2 text-center flex-shrink-0 border border-emerald-500/20">
                 <Compass className="h-5 w-5 animate-spin animate-duration-3000" />
@@ -1276,7 +1433,7 @@ export default function App() {
       </div>
 
       {/* RIGHT SIDEBAR COCKPIT CONTROL PANEL */}
-      <div className="w-full md:w-[440px] lg:w-[480px] h-[50vh] md:h-full flex flex-col bg-slate-150 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-900 shadow-2xl overflow-y-auto shrink-0 z-20 order-2 md:order-2 md:ml-auto">
+      <div className="absolute bottom-4 left-4 right-4 md:left-auto md:top-24 md:bottom-4 md:right-4 w-auto md:w-[410px] lg:w-[430px] max-h-[38vh] md:max-h-none flex flex-col bg-white/95 dark:bg-slate-950/95 md:bg-white/90 md:dark:bg-slate-950/85 border border-slate-200/80 dark:border-slate-850/80 shadow-2xl rounded-3xl overflow-hidden shrink-0 z-[1015] pointer-events-auto backdrop-blur-md">
         
         {/* Scrollable Bento Grid Area */}
         <div className="p-4 md:p-6 space-y-4 flex-1 overflow-y-auto">
@@ -1576,6 +1733,105 @@ export default function App() {
         isOpen={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
       />
+
+      {/* RELOCATION CONFIRMATION DIALOG */}
+      {relocateConfirmData && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          {/* Backdrop overlay - clicks dismissed removed to prevent instant double-click termination */}
+          <div className="absolute inset-0 bg-slate-900/75 backdrop-blur-md transition-opacity" />
+
+          {/* Modal Container */}
+          <div className="relative w-full max-w-md transform overflow-hidden rounded-3xl bg-white p-6 shadow-2xl transition-all dark:bg-slate-900 border border-slate-150 dark:border-slate-850 animate-in fade-in zoom-in-95 duration-200">
+            <div className="space-y-4">
+              
+              {/* Header Title with Alarm/Replace Warning Icon */}
+              <div className="flex items-center gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/45 text-amber-500 border border-amber-100 dark:border-amber-900/40">
+                  <ShieldAlert className="h-6 w-6 animate-pulse" />
+                </div>
+                <div className="text-left">
+                  <h3 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
+                    {tripStatus === 'active' ? "Stop Active Commute?" : "Replace Current Stop?"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {tripStatus === 'active' 
+                      ? "An active tracking session is currently running."
+                      : "Would you like to discard the existing destination?"
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Informative Grid Details comparison block */}
+              <div className="space-y-3 pt-1 text-left">
+                {destination && (
+                  <div className="rounded-2xl bg-slate-50/70 dark:bg-slate-950/40 p-3.5 border border-slate-200/50 dark:border-slate-800/50 text-xs">
+                    <span className="text-[9px] font-mono font-bold tracking-wider text-slate-400 dark:text-slate-500 block uppercase">CURRENT CONFIGURED STOP</span>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{destination.name}</p>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-1.5 flex justify-between">
+                      <span>{destination.lat.toFixed(4)}°, {destination.lon.toFixed(4)}°</span>
+                      <span>Radius: <strong className="text-slate-700 dark:text-slate-300 font-bold">{formatDistanceMeter(destination.radius || radiusMeters)}</strong></span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[10px] bg-slate-100 dark:bg-slate-900/50 rounded-lg px-2.5 py-1 text-slate-500 font-semibold font-mono">
+                      <span>Distance from you:</span>
+                      <span className="text-indigo-650 dark:text-indigo-400 font-bold">
+                        {formatDistanceMeter(getDistanceMeters(currentLocation.lat, currentLocation.lon, destination.lat, destination.lon))}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-center py-1">
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                  <div className="mx-3 text-[9px] font-mono tracking-widest text-[#FF1744] font-bold uppercase">REPLACING WITH NEW SELECTION</div>
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1" />
+                </div>
+
+                <div className="rounded-2xl bg-emerald-500/5 dark:bg-emerald-400/5 p-3.5 border border-emerald-500/20 dark:border-emerald-400/20 text-xs shadow-sm">
+                  <span className="text-[9px] font-mono font-bold tracking-wider text-emerald-500 dark:text-emerald-400 block uppercase">PROPOSED COMMUTE STOP</span>
+                  <p className="font-bold text-slate-950 dark:text-white truncate mt-0.5">{relocateConfirmData.name}</p>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-455 font-mono mt-1.5 flex justify-between">
+                    <span>{relocateConfirmData.lat.toFixed(4)}°, {relocateConfirmData.lon.toFixed(4)}°</span>
+                    <span>Radius: <strong className="text-emerald-650 dark:text-emerald-400 font-bold">{formatDistanceMeter(relocateConfirmData.radius || radiusMeters)}</strong></span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] bg-emerald-500/10 dark:bg-emerald-500/10 rounded-lg px-2.5 py-1 text-emerald-700 dark:text-emerald-400 font-semibold font-mono">
+                    <span>Distance from you:</span>
+                    <span className="text-emerald-600 dark:text-emerald-300 font-black">
+                      {formatDistanceMeter(getDistanceMeters(currentLocation.lat, currentLocation.lon, relocateConfirmData.lat, relocateConfirmData.lon))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warnings */}
+              {tripStatus === 'active' && (
+                <div className="p-3 bg-amber-500/10 rounded-2xl text-[11px] text-amber-600 dark:text-amber-400 leading-normal border border-amber-500/10 font-sans">
+                  ⚠️ <strong>Notice:</strong> This replaces your currently active tracking session. Your current walk/transit statistics logs will save and a brand-new track will start.
+                </div>
+              )}
+
+              {/* Confirmation Action buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRelocateConfirmData(null)}
+                  className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-150 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-2xl transition-all cursor-pointer active:scale-98"
+                >
+                  Keep Existing
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRelocation}
+                  className="flex-1 px-4 py-3 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white text-xs font-bold rounded-2xl shadow-md shadow-rose-500/10 hover:shadow-rose-500/20 transition-all cursor-pointer active:scale-98"
+                >
+                  {tripStatus === 'active' ? "Stop & Relocate" : "Use New Stop"}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sliding Left Side Navigation Menu Drawer */}
       {isMenuOpen && (
