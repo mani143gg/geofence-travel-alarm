@@ -41,8 +41,8 @@ import { Destination, LocationPoint, TripHistoryItem, TripStatus } from './types
 import { startAlarmSound, stopAlarmSound, playChime, ALARM_SOUND_OPTIONS } from './utils/audio';
 
 // Fallback London coordinates for initial location centering
-const DEFAULT_LAT = 51.5074;
-const DEFAULT_LON = -0.1278;
+const DEFAULT_LAT = 8.5241;
+const DEFAULT_LON = 76.9366;
 
 export default function App() {
   // Appearance Theme
