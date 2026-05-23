@@ -309,11 +309,13 @@ export default function App() {
     const geo = navigator.geolocation;
     if (!geo) {
       setGpsError("Geolocation is completely disabled or unsupported in this browser.");
+      setIsLocationLoading(false);
       return;
     }
 
     setGpsError(null);
     setIsSimulating(false);
+    setIsLocationLoading(true);
 
     const targetId = geo.watchPosition(
       (pos) => {
@@ -332,6 +334,7 @@ export default function App() {
 
         setCurrentLocation(freshPoint);
         setRealGPSActive(true);
+        setIsLocationLoading(false);
 
         // Center map dynamically to follow real position
         if (mapRef.current) {
@@ -359,6 +362,7 @@ export default function App() {
         else if (error.code === error.TIMEOUT) label = "GPS Polling timed out. Try toggling your location settings.";
         setGpsError(label);
         setRealGPSActive(false);
+        setIsLocationLoading(false);
       },
       {
         enableHighAccuracy: useHighAccuracy,
@@ -436,13 +440,19 @@ export default function App() {
 
     // Double-click grid maps or single-tap to manually position Stop boundaries
     map.on('click', (e: any) => {
-      // 1. Do not allow destination changes while alarm tracker is running
-      if (tripStatusRef.current === 'active') return;
-
-      // 2. Prevent touching and changing commute once set to stop accidental touches
-      if (destinationRef.current !== null) return;
-
       const { lat, lng } = e.latlng;
+
+      // 1. Show confirmation dialog if trip is active or destination is already set
+      if (tripStatusRef.current === 'active' || destinationRef.current !== null) {
+        setRelocateConfirmData({
+          lat,
+          lon: lng,
+          name: `Marker Pin: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+          radius: radiusMetersRef.current
+        });
+        return;
+      }
+
       const visualName = `Marker Pin: ${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
       updateStopDestination(lat, lng, visualName, radiusMetersRef.current);
       
@@ -1727,10 +1737,13 @@ export default function App() {
               {/* Header Titles */}
               <div className="space-y-1">
                 <h3 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-                  Active Commute Running
+                  {tripStatus === 'active' ? "Active Commute Running" : "Replace Current Stop?"}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed px-2">
-                  You have an active tracking session. To proceed with setting this new destination, you must cancel the current session first.
+                  {tripStatus === 'active' 
+                    ? "You have an active tracking session. To proceed with setting this new destination, you must cancel the current session first."
+                    : "A commute stop has already been configured on the map. Would you like to discard it and set this new location instead?"
+                  }
                 </p>
               </div>
 
@@ -1765,7 +1778,7 @@ export default function App() {
                   onClick={confirmRelocation}
                   className="flex-1 px-4 py-3 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white text-xs font-bold rounded-2xl shadow-md shadow-rose-500/10 hover:shadow-rose-500/20 transition-all cursor-pointer active:scale-98"
                 >
-                  Stop & Relocate
+                  {tripStatus === 'active' ? "Stop & Relocate" : "Replace Stop"}
                 </button>
               </div>
 
