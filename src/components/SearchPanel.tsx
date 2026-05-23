@@ -130,16 +130,24 @@ export default function SearchPanel({
       ? `${parts[0].trim()}, ${parts[1].trim()} (${parts[parts.length - 1].trim()})` 
       : displayNameLong;
 
-    onSelectLocation(lat, lon, shortenedName);
-    saveToRecents(shortenedName, lat, lon);
     setQuery('');
     setResults([]);
     setShowDropdown(false);
+
+    // Defer the heavy map operations to are free animation frames to optimize INP
+    setTimeout(() => {
+      onSelectLocation(lat, lon, shortenedName);
+      saveToRecents(shortenedName, lat, lon);
+    }, 0);
   };
 
   const handleSelectRecent = (recent: { name: string; lat: number; lon: number }) => {
-    onSelectLocation(recent.lat, recent.lon, recent.name);
     setShowDropdown(false);
+    
+    // Defer parent coordinates and route update tasks
+    setTimeout(() => {
+      onSelectLocation(recent.lat, recent.lon, recent.name);
+    }, 0);
   };
 
   const handleClear = () => {

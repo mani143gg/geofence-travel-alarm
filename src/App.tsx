@@ -1370,7 +1370,7 @@ export default function App() {
       
 
       {/* FULL MAP AREA */}
-      <div className="flex-grow h-[50vh] md:h-full relative z-10 bg-slate-150 order-1 md:order-2">
+      <div className="absolute inset-0 w-full h-full z-0 bg-slate-150">
         <div id={mapContainerId} className="h-full w-full" />
         
         {/* Floating Top Search Panel ON TOP of Map layout context */}
@@ -1400,7 +1400,7 @@ export default function App() {
         </div>
 
         {/* Recenter Map floating control stacked cleanly right above Leaflet's zoom controls */}
-        <div className="absolute bottom-[82px] right-[10px] z-[1010] pointer-events-auto">
+        <div className="absolute top-[72px] left-[16px] md:top-auto md:bottom-[78px] md:left-[10px] z-[1010] pointer-events-auto">
           {/* Recenter Map Target */}
           <button
             onClick={handleRecenterLocation}
@@ -1413,7 +1413,7 @@ export default function App() {
         
         {/* Floating status marker (Saves commutes stats view while tracking) */}
         {tripStatus === 'active' && distanceRemaining !== null && (
-          <div className="absolute bottom-6 left-6 z-20 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-slate-800 backdrop-blur-md animate-bounce">
+          <div className="absolute bottom-[40vh] left-4 md:bottom-6 md:left-6 z-20 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-slate-800 backdrop-blur-md animate-bounce">
             <div className="flex items-start gap-3">
               <div className="rounded-xl bg-emerald-500/20 text-emerald-400 p-2 text-center flex-shrink-0 border border-emerald-500/20">
                 <Compass className="h-5 w-5 animate-spin animate-duration-3000" />
@@ -1433,7 +1433,7 @@ export default function App() {
       </div>
 
       {/* RIGHT SIDEBAR COCKPIT CONTROL PANEL */}
-      <div className="w-full md:w-[440px] lg:w-[480px] h-[50vh] md:h-full flex flex-col bg-slate-150 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-900 shadow-2xl overflow-y-auto shrink-0 z-20 order-2 md:order-2 md:ml-auto">
+      <div className="absolute bottom-4 left-4 right-4 md:left-auto md:top-24 md:bottom-4 md:right-4 w-auto md:w-[410px] lg:w-[430px] max-h-[38vh] md:max-h-none flex flex-col bg-white/95 dark:bg-slate-950/95 md:bg-white/90 md:dark:bg-slate-950/85 border border-slate-200/80 dark:border-slate-850/80 shadow-2xl rounded-3xl overflow-hidden shrink-0 z-[1015] pointer-events-auto backdrop-blur-md">
         
         {/* Scrollable Bento Grid Area */}
         <div className="p-4 md:p-6 space-y-4 flex-1 overflow-y-auto">
