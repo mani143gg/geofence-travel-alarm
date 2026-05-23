@@ -55,6 +55,14 @@ export default function App() {
   // Location Loading State across initially granting permissions
   const [isLocationLoading, setIsLocationLoading] = useState<boolean>(true);
 
+  // Safety fallback to auto-dismiss loader after 4.5 seconds if geolocation hangs or is blocked in iframe
+  useEffect(() => {
+    const loaderFallbackTimer = setTimeout(() => {
+      setIsLocationLoading(false);
+    }, 4500);
+    return () => clearTimeout(loaderFallbackTimer);
+  }, []);
+
   // Trip Core State
   const [currentLocation, setCurrentLocation] = useState<LocationPoint>({
     lat: DEFAULT_LAT,
@@ -423,7 +431,8 @@ export default function App() {
     const attribution = '© OpenStreetMap contributors © CARTO';
 
     const map = L.map(mapContainerId, {
-      zoomControl: false // custom floating controls are positioned manually
+      zoomControl: false, // custom floating controls are positioned manually
+      doubleClickZoom: false // disable default double-click zoom to let us use dblclick
     }).setView([DEFAULT_LAT, DEFAULT_LON], 11);
 
     tileLayerRef.current = L.tileLayer(tileUrl, {
@@ -438,8 +447,8 @@ export default function App() {
 
     mapRef.current = map;
 
-    // Double-click grid maps or single-tap to manually position Stop boundaries
-    map.on('click', (e: any) => {
+    // Double-click grid maps to manually position Stop boundaries
+    map.on('dblclick', (e: any) => {
       const { lat, lng } = e.latlng;
 
       // 1. Show confirmation dialog if trip is active or destination is already set
