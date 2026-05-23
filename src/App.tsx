@@ -1133,8 +1133,73 @@ export default function App() {
       )}
 
 
-      {/* LEFT SIDEBAR COCKPIT CONTROL PANEL */}
-      <div className="w-full md:w-[440px] lg:w-[480px] h-[50vh] md:h-full flex flex-col bg-slate-150 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-900 shadow-2xl overflow-y-auto shrink-0 z-20 order-2 md:order-1">
+      
+
+      {/* FULL MAP AREA */}
+      <div className="flex-grow h-[50vh] md:h-full relative z-10 bg-slate-150 order-1 md:order-2">
+        <div id={mapContainerId} className="h-full w-full" />
+        
+        {/* Floating Top Search Panel ON TOP of Map layout context */}
+        <div className="absolute top-4 left-4 right-4 sm:right-6 sm:w-[380px] md:w-[420px] sm:left-auto z-[1010] pointer-events-auto flex items-stretch gap-2">
+          {/* Settings & Navigation Slide Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen(true)}
+            className="flex-shrink-0 w-12 bg-white/95 dark:bg-slate-900/95 text-indigo-650 dark:text-indigo-400 hover:text-indigo-750 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl flex items-center justify-center transition-all shadow-md hover:shadow-lg cursor-pointer hover:scale-102 active:scale-98"
+            title="Open Settings & Navigation Menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+
+          <div className="flex-1 min-w-0">
+            <SearchPanel 
+              onSelectLocation={handleSelectLocation}
+              currentDestinationName={destination?.name}
+              onClearDestination={() => {
+                setDestination(null);
+                setDistanceRemaining(null);
+                setTripStatus('idle');
+                setRouteWaypoints([]);
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Recenter Map floating control stacked cleanly right above Leaflet's zoom controls */}
+        <div className="absolute bottom-[82px] right-[10px] z-[1010] pointer-events-auto">
+          {/* Recenter Map Target */}
+          <button
+            onClick={handleRecenterLocation}
+            className="w-[30px] h-[30px] bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 rounded-md transition-all cursor-pointer flex items-center justify-center shadow-sm hover:scale-105 active:scale-95"
+            title="Recenter Map on Current Coordinates"
+          >
+            <Compass className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          </button>
+        </div>
+        
+        {/* Floating status marker (Saves commutes stats view while tracking) */}
+        {tripStatus === 'active' && distanceRemaining !== null && (
+          <div className="absolute bottom-6 left-6 z-20 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-slate-800 backdrop-blur-md animate-bounce">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-emerald-500/20 text-emerald-400 p-2 text-center flex-shrink-0 border border-emerald-500/20">
+                <Compass className="h-5 w-5 animate-spin animate-duration-3000" />
+              </div>
+              <div>
+                <span className="text-[9px] font-mono font-bold tracking-widest text-[#00E676] block">TRANSIT TRACKING ACTIVE</span>
+                <p className="text-xs font-bold font-sans mt-0.5 line-clamp-1">{destination?.name.split(',')[0]}</p>
+                
+                <div className="flex items-center gap-3 mt-2 text-[11px] font-mono text-slate-400 divide-x divide-slate-800">
+                  <span className="text-slate-200">Gap: <strong className="text-white">{getFormattedRemainingDistance()}</strong></span>
+                  <span className="pl-3">ETA: <strong className="text-white">{getETAString()}</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT SIDEBAR COCKPIT CONTROL PANEL */}
+      <div className="w-full md:w-[440px] lg:w-[480px] h-[50vh] md:h-full flex flex-col bg-slate-150 dark:bg-slate-950 border-l border-slate-200 dark:border-slate-900 shadow-2xl overflow-y-auto shrink-0 z-20 order-2 md:order-2 md:ml-auto">
         
         {/* Scrollable Bento Grid Area */}
         <div className="p-4 md:p-6 space-y-4 flex-1 overflow-y-auto">
@@ -1420,69 +1485,6 @@ export default function App() {
           <span>Lat: <strong>{currentLocation.lat.toFixed(4)}</strong>, Lon: <strong>{currentLocation.lon.toFixed(4)}</strong></span>
           <span>Accuracy: <strong>{currentLocation.accuracy.toFixed(0)}m</strong></span>
         </div>
-      </div>
-
-      {/* FULL MAP AREA */}
-      <div className="flex-grow h-[50vh] md:h-full relative z-10 bg-slate-150 order-1 md:order-2">
-        <div id={mapContainerId} className="h-full w-full" />
-        
-        {/* Floating Top Search Panel ON TOP of Map layout context */}
-        <div className="absolute top-4 left-4 right-4 sm:right-6 sm:w-[380px] md:w-[420px] sm:left-auto z-[1010] pointer-events-auto flex items-stretch gap-2">
-          {/* Settings & Navigation Slide Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen(true)}
-            className="flex-shrink-0 w-12 bg-white/95 dark:bg-slate-900/95 text-indigo-650 dark:text-indigo-400 hover:text-indigo-750 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl flex items-center justify-center transition-all shadow-md hover:shadow-lg cursor-pointer hover:scale-102 active:scale-98"
-            title="Open Settings & Navigation Menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-
-          <div className="flex-1 min-w-0">
-            <SearchPanel 
-              onSelectLocation={handleSelectLocation}
-              currentDestinationName={destination?.name}
-              onClearDestination={() => {
-                setDestination(null);
-                setDistanceRemaining(null);
-                setTripStatus('idle');
-                setRouteWaypoints([]);
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Recenter Map floating control stacked cleanly right above Leaflet's zoom controls */}
-        <div className="absolute bottom-[82px] right-[10px] z-[1010] pointer-events-auto">
-          {/* Recenter Map Target */}
-          <button
-            onClick={handleRecenterLocation}
-            className="w-[30px] h-[30px] bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-300 rounded-md transition-all cursor-pointer flex items-center justify-center shadow-sm hover:scale-105 active:scale-95"
-            title="Recenter Map on Current Coordinates"
-          >
-            <Compass className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          </button>
-        </div>
-        
-        {/* Floating status marker (Saves commutes stats view while tracking) */}
-        {tripStatus === 'active' && distanceRemaining !== null && (
-          <div className="absolute bottom-6 left-6 z-20 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-slate-800 backdrop-blur-md animate-bounce">
-            <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-emerald-500/20 text-emerald-400 p-2 text-center flex-shrink-0 border border-emerald-500/20">
-                <Compass className="h-5 w-5 animate-spin animate-duration-3000" />
-              </div>
-              <div>
-                <span className="text-[9px] font-mono font-bold tracking-widest text-[#00E676] block">TRANSIT TRACKING ACTIVE</span>
-                <p className="text-xs font-bold font-sans mt-0.5 line-clamp-1">{destination?.name.split(',')[0]}</p>
-                
-                <div className="flex items-center gap-3 mt-2 text-[11px] font-mono text-slate-400 divide-x divide-slate-800">
-                  <span className="text-slate-200">Gap: <strong className="text-white">{getFormattedRemainingDistance()}</strong></span>
-                  <span className="pl-3">ETA: <strong className="text-white">{getETAString()}</strong></span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* TRIP LOGS History DRAWER */}
